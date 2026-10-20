@@ -11,6 +11,8 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH);
+  const [isThinking, setIsThinking] = useState(false);
+
   const dragging = useRef(false);
   const messagesEndRef = useRef(null);
 
@@ -40,7 +42,7 @@ function App() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, isThinking]);
 
   function startResize(event) {
     event.preventDefault();
@@ -53,21 +55,28 @@ function App() {
     event.preventDefault();
 
     const text = message.trim();
-    if (!text) return;
+
+    if (!text || isThinking) return;
 
     setMessages((previous) => [
       ...previous,
       { role: "user", content: text },
     ]);
+
     setMessage("");
+    setIsThinking(true);
 
-    // Reserve an assistant message for streamed output.
-    const assistantIndex = messages.length + 1;
+    // Create an empty assistant message for streamed output.
+    let assistantIndex;
 
-    setMessages((previous) => [
-      ...previous,
-      { role: "assistant", content: "" },
-    ]);
+    setMessages((previous) => {
+      assistantIndex = previous.length + 1;
+
+      return [
+        ...previous,
+        { role: "assistant", content: "" },
+      ];
+    });
 
     try {
       const response = await fetch(
@@ -86,42 +95,59 @@ function App() {
       }
 
       if (!response.body) {
-        throw new Error("Streaming response is not supported.");
+        throw new Error("Streaming is not supported by this response.");
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
 
+      let receivedFirstChunk = false;
+
+      function appendToAssistant(content) {
+        if (!content) return;
+
+        setMessages((previous) =>
+          previous.map((item, index) =>
+            index === assistantIndex
+              ? { ...item, content: item.content + content }
+              : item
+          )
+        );
+      }
+
       while (true) {
         const { value, done } = await reader.read();
+
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
 
         if (chunk) {
-          setMessages((previous) =>
-            previous.map((item, index) =>
-              index === assistantIndex
-                ? { ...item, content: item.content + chunk }
-                : item
-            )
-          );
+          if (!receivedFirstChunk) {
+            receivedFirstChunk = true;
+            setIsThinking(false);
+          }
+
+          appendToAssistant(chunk);
         }
       }
 
+      // Process any remaining decoded text.
       const remaining = decoder.decode();
 
       if (remaining) {
-        setMessages((previous) =>
-          previous.map((item, index) =>
-            index === assistantIndex
-              ? { ...item, content: item.content + remaining }
-              : item
-          )
-        );
+        if (!receivedFirstChunk) {
+          setIsThinking(false);
+        }
+
+        appendToAssistant(remaining);
       }
+
+      setIsThinking(false);
     } catch (error) {
       console.error("Chat error:", error);
+
+      setIsThinking(false);
 
       setMessages((previous) =>
         previous.map((item, index) =>
@@ -147,6 +173,7 @@ function App() {
           <>
             <div className="sidebar-heading">
               <h2>✦ Synapse AI</h2>
+
               <button
                 className="icon-button"
                 onClick={() => setSidebarOpen(false)}
@@ -159,18 +186,23 @@ function App() {
 
             <button
               className="new-chat-button"
-              onClick={() => setMessages([])}
+              onClick={() => {
+                setMessages([]);
+                setIsThinking(false);
+              }}
             >
               <span>＋</span> New chat
             </button>
 
             <p className="sidebar-section-label">WORKSPACE</p>
+
             <p className="sidebar-note">
               Your conversations will appear here.
             </p>
 
             <div className="sidebar-bottom">
               <div className="profile-avatar">S</div>
+
               <div className="profile-text">
                 <strong>Synapse User</strong>
                 <span>Personal workspace</span>
@@ -199,6 +231,7 @@ function App() {
                 ☰
               </button>
             )}
+
             <span className="header-title">Synapse AI</span>
           </div>
 
@@ -226,6 +259,17 @@ function App() {
               ))
             )}
 
+            {isThinking && (
+              <div
+                className="thinking-indicator"
+                role="status"
+                aria-live="polite"
+              >
+                <span className="thinking-spinner" />
+                <span>Thinking...</span>
+              </div>
+            )}
+
             <div ref={messagesEndRef} />
           </div>
         </section>
@@ -237,8 +281,13 @@ function App() {
               onChange={(event) => setMessage(event.target.value)}
               placeholder="Message Synapse AI..."
               aria-label="Message Synapse AI"
+              disabled={isThinking}
             />
-            <button type="submit" disabled={!message.trim()}>
+
+            <button
+              type="submit"
+              disabled={!message.trim() || isThinking}
+            >
               Send ↑
             </button>
           </form>

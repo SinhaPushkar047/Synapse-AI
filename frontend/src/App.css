@@ -42,7 +42,7 @@ button {
   background: #0b0c10;
 }
 
-/* Sidebar: full height, independently fixed */
+/* Sidebar */
 .sidebar {
   position: relative;
   flex: 0 0 auto;
@@ -180,7 +180,7 @@ button {
   background: #6556d9;
 }
 
-/* Chat occupies all remaining viewport space */
+/* Main chat */
 .chat {
   display: flex;
   flex: 1 1 0;
@@ -228,7 +228,7 @@ button {
   border-radius: 50%;
 }
 
-/* ONLY this section scrolls */
+/* Full-width conversation area */
 .messages {
   flex: 1 1 0;
   min-height: 0;
@@ -241,12 +241,13 @@ button {
 
 .messages-inner {
   width: 100%;
-  max-width: 900px;
+  max-width: none;
   min-height: 100%;
-  margin: 0 auto;
-  padding: 30px 24px;
+  margin: 0;
+  padding: 30px 5%;
 }
 
+/* Welcome screen */
 .welcome {
   margin-top: 17vh;
   text-align: center;
@@ -276,25 +277,40 @@ button {
   font-size: 14px;
 }
 
+/* Message layout */
 .message {
-  width: fit-content;
-  max-width: 85%;
-  margin: 16px 0;
-  padding: 13px 17px;
-  border-radius: 15px;
-  line-height: 1.7;
+  box-sizing: border-box;
+  line-height: 1.8;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
+/* User messages remain in bubbles */
 .message.user {
-  margin-left: auto;
+  display: table;
+  width: fit-content;
+  max-width: 85%;
+  margin: 20px 0 24px auto;
+  padding: 12px 17px;
+  color: #f4f4f7;
   background: #343747;
+  border: none;
+  border-radius: 18px;
 }
 
+/* Assistant output: no box, no background, full width */
 .message.assistant {
-  margin-right: auto;
-  background: #15161d;
+  display: block;
+  width: 100%;
+  max-width: none;
+  margin: 12px 0 28px;
+  padding: 0;
+  color: #f4f4f7;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  text-align: left;
 }
 
 /* Composer stays at the bottom */
@@ -386,7 +402,7 @@ button {
   }
 
   .messages-inner {
-    padding: 20px 12px;
+    padding: 20px 16px;
   }
 
   .composer-area {
@@ -404,5 +420,68 @@ button {
 
   .disclaimer {
     margin-bottom: 8px;
+  }
+}
+
+
+/* Full-width assistant responses without a surrounding box */
+.message.assistant {
+  display: block;
+  width: 100%;
+  max-width: none;
+  margin: 12px 0 28px;
+  padding: 0;
+  color: #f4f4f7;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  text-align: left;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Use the available conversation width */
+.messages-inner {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 30px 5%;
+}
+
+/* Thinking indicator */
+.thinking-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 12px 0 24px;
+  color: #a7a9b6;
+  font-size: 14px;
+}
+
+/* Animated loading spinner */
+.thinking-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border: 2px solid #383947;
+  border-top-color: #a99cff;
+  border-radius: 50%;
+  animation: thinking-spin 0.8s linear infinite;
+}
+
+@keyframes thinking-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Keep the loading animation accessible */
+@media (prefers-reduced-motion: reduce) {
+  .thinking-spinner {
+    animation-duration: 2s;
   }
 }
