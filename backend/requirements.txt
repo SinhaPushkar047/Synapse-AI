@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+langgraph
+langchain-core
+langchain-groq
+langchain-nvidia-ai-endpoints
+langgraph-checkpoint-sqlite
