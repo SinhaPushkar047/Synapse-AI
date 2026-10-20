@@ -7,7 +7,11 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Annotated, TypedDict
+from fastapi.responses import StreamingResponse
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="Synapse AI")
 
@@ -53,12 +57,20 @@ class ChatRequest(BaseModel):
 def home():
     return {"message": "Synapse AI API is running!"}
 
+
 @app.post("/chat")
 def chat_endpoint(request: ChatRequest):
-    response = workflow.invoke({
-        "chat_history": [HumanMessage(content=request.message)]
-    })
 
-    return {
-        "response": response["chat_history"][-1].content
-    }
+    def generate_response():
+        for message_chunk, metadata in workflow.stream(
+            {"chat_history": [HumanMessage(content=request.message)]},
+            stream_mode="messages"
+        ):
+            if message_chunk.content:
+                yield message_chunk.content
+
+    return StreamingResponse(
+        generate_response(),
+        media_type="text/plain"
+    )
+

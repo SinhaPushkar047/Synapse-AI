@@ -57,41 +57,81 @@ function App() {
     ]);
     setMessage("");
 
-    try {
-      const response = await fetch(
-        "https://synapse-ai-9q9j.onrender.com/chat",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ message: text }),
-        }
-      );
 
-      if (!response.ok) {
-        throw new Error(`Request failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      setMessages((previous) => [
-        ...previous,
-        { role: "assistant", content: data.response },
-      ]);
-    } catch (error) {
-      console.error("Chat error:", error);
-
-      setMessages((previous) => [
-        ...previous,
-        {
-          role: "assistant",
-          content:
-            "Sorry, I couldn't connect to Synapse AI. Please try again.",
-        },
-      ]);
+try {
+  const response = await fetch(
+    "https://synapse-ai-9q9j.onrender.com/chat",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ message: text }),
     }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`);
   }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  // Add an empty assistant message first
+  setMessages((previous) => [
+    ...previous,
+    { role: "assistant", content: "" },
+  ]);
+
+  while (true) {
+    const { value, done } = await reader.read();
+
+    if (done) break;
+
+    const chunk = decoder.decode(value, { stream: true });
+
+    setMessages((previous) => {
+      const updated = [...previous];
+      const lastMessage = updated.length - 1;
+
+      updated[lastMessage] = {
+        ...updated[lastMessage],
+        content: updated[lastMessage].content + chunk,
+      };
+
+      return updated;
+    });
+  }
+
+  // Flush any remaining decoded text
+  const remaining = decoder.decode();
+
+  if (remaining) {
+    setMessages((previous) => {
+      const updated = [...previous];
+      const lastMessage = updated.length - 1;
+
+      updated[lastMessage] = {
+        ...updated[lastMessage],
+        content: updated[lastMessage].content + remaining,
+      };
+
+      return updated;
+    });
+  }
+} catch (error) {
+  console.error("Chat error:", error);
+
+  setMessages((previous) => [
+    ...previous,
+    {
+      role: "assistant",
+      content:
+        "Sorry, I couldn't connect to Synapse AI. Please try again.",
+    },
+  ]);
+}
+
 
 
   return (
