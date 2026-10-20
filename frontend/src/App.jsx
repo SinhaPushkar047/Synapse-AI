@@ -159,33 +159,45 @@ function App() {
           <span className="status"><span /> Ready</span>
         </header>
 
+        
         <section className="messages">
-          {messages.length === 0 ? (
-            <div className="welcome">
-              <div className="welcome-symbol">✦</div>
-              <h1>Where should we begin?</h1>
-              <p>Ask a question and start exploring.</p>
-            </div>
-          ) : (
-            messages.map((item, index) => (
-              <div className={`message ${item.role}`} key={index}>
-                {item.content}
+          <div className="messages-inner">
+            {messages.length === 0 ? (
+              <div className="welcome">
+                <div className="welcome-symbol">✦</div>
+                <h1>Where should we begin?</h1>
+                <p>Ask a question and start exploring.</p>
               </div>
-            ))
-          )}
+            ) : (
+              messages.map((item, index) => (
+                <div className={`message ${item.role}`} key={index}>
+                  {item.content}
+                </div>
+              ))
+            )}
+          </div>
         </section>
 
-        <form className="composer" onSubmit={handleSend}>
-          <input
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-            placeholder="Message Synapse AI..."
-            aria-label="Message Synapse AI"
-          />
-          <button type="submit" disabled={!message.trim()}>
-            Send ↑
-          </button>
-        </form>
+
+        
+        <div className="composer-area">
+          <form className="composer" onSubmit={handleSend}>
+            <input
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              placeholder="Message Synapse AI..."
+              aria-label="Message Synapse AI"
+            />
+            <button type="submit" disabled={!message.trim()}>
+              Send ↑
+            </button>
+          </form>
+
+          <p className="disclaimer">
+            Synapse AI can make mistakes. Verify important information.
+          </p>
+        </div>
+
 
         <p className="disclaimer">
           Synapse AI can make mistakes. Verify important information.
