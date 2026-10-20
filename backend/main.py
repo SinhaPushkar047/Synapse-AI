@@ -5,10 +5,21 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Annotated, TypedDict
 import os
 
 app = FastAPI(title="Synapse AI")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
 
 model = ChatGroq(
     model="openai/gpt-oss-120b",
