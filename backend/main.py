@@ -11,16 +11,21 @@ import os
 
 app = FastAPI(title="Synapse AI")
 
+
+from fastapi.middleware.cors import CORSMiddleware
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "https://synapseai-blush.vercel.app",
+        "https://synapse-6yt10p60g-sinhapushkar047.vercel.app",
     ],
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
 
 model = ChatGroq(
     model="openai/gpt-oss-120b",
