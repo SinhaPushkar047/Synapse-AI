@@ -12,6 +12,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH);
   const dragging = useRef(false);
+  const messagesEndRef = useRef(null);
 
   useEffect(() => {
     function handlePointerMove(event) {
@@ -37,6 +38,10 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   function startResize(event) {
     event.preventDefault();
     dragging.current = true;
@@ -44,7 +49,6 @@ function App() {
     document.body.style.userSelect = "none";
   }
 
-  
   async function handleSend(event) {
     event.preventDefault();
 
@@ -57,82 +61,81 @@ function App() {
     ]);
     setMessage("");
 
+    // Reserve an assistant message for streamed output.
+    const assistantIndex = messages.length + 1;
 
-try {
-  const response = await fetch(
-    "https://synapse-ai-9q9j.onrender.com/chat",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ message: text }),
+    setMessages((previous) => [
+      ...previous,
+      { role: "assistant", content: "" },
+    ]);
+
+    try {
+      const response = await fetch(
+        "https://synapse-ai-9q9j.onrender.com/chat",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ message: text }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.status}`);
+      }
+
+      if (!response.body) {
+        throw new Error("Streaming response is not supported.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+
+        if (chunk) {
+          setMessages((previous) =>
+            previous.map((item, index) =>
+              index === assistantIndex
+                ? { ...item, content: item.content + chunk }
+                : item
+            )
+          );
+        }
+      }
+
+      const remaining = decoder.decode();
+
+      if (remaining) {
+        setMessages((previous) =>
+          previous.map((item, index) =>
+            index === assistantIndex
+              ? { ...item, content: item.content + remaining }
+              : item
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Chat error:", error);
+
+      setMessages((previous) =>
+        previous.map((item, index) =>
+          index === assistantIndex
+            ? {
+                ...item,
+                content:
+                  "Sorry, I couldn't connect to Synapse AI. Please try again.",
+              }
+            : item
+        )
+      );
     }
-  );
-
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
   }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-
-  // Add an empty assistant message first
-  setMessages((previous) => [
-    ...previous,
-    { role: "assistant", content: "" },
-  ]);
-
-  while (true) {
-    const { value, done } = await reader.read();
-
-    if (done) break;
-
-    const chunk = decoder.decode(value, { stream: true });
-
-    setMessages((previous) => {
-      const updated = [...previous];
-      const lastMessage = updated.length - 1;
-
-      updated[lastMessage] = {
-        ...updated[lastMessage],
-        content: updated[lastMessage].content + chunk,
-      };
-
-      return updated;
-    });
-  }
-
-  // Flush any remaining decoded text
-  const remaining = decoder.decode();
-
-  if (remaining) {
-    setMessages((previous) => {
-      const updated = [...previous];
-      const lastMessage = updated.length - 1;
-
-      updated[lastMessage] = {
-        ...updated[lastMessage],
-        content: updated[lastMessage].content + remaining,
-      };
-
-      return updated;
-    });
-  }
-} catch (error) {
-  console.error("Chat error:", error);
-
-  setMessages((previous) => [
-    ...previous,
-    {
-      role: "assistant",
-      content:
-        "Sorry, I couldn't connect to Synapse AI. Please try again.",
-    },
-  ]);
-}
-
-
 
   return (
     <div className="app">
@@ -162,7 +165,9 @@ try {
             </button>
 
             <p className="sidebar-section-label">WORKSPACE</p>
-            <p className="sidebar-note">Your conversations will appear here.</p>
+            <p className="sidebar-note">
+              Your conversations will appear here.
+            </p>
 
             <div className="sidebar-bottom">
               <div className="profile-avatar">S</div>
@@ -196,10 +201,12 @@ try {
             )}
             <span className="header-title">Synapse AI</span>
           </div>
-          <span className="status"><span /> Ready</span>
+
+          <span className="status">
+            <span /> Ready
+          </span>
         </header>
 
-        
         <section className="messages">
           <div className="messages-inner">
             {messages.length === 0 ? (
@@ -210,16 +217,19 @@ try {
               </div>
             ) : (
               messages.map((item, index) => (
-                <div className={`message ${item.role}`} key={index}>
+                <div
+                  className={`message ${item.role}`}
+                  key={index}
+                >
                   {item.content}
                 </div>
               ))
             )}
+
+            <div ref={messagesEndRef} />
           </div>
         </section>
 
-
-        
         <div className="composer-area">
           <form className="composer" onSubmit={handleSend}>
             <input
@@ -237,11 +247,6 @@ try {
             Synapse AI can make mistakes. Verify important information.
           </p>
         </div>
-
-
-        <p className="disclaimer">
-          Synapse AI can make mistakes. Verify important information.
-        </p>
       </main>
     </div>
   );
