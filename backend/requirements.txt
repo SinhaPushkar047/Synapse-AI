@@ -1,0 +1,7 @@
+langchain
+langchain-nvidia-ai-endpoints
+langgraph
+langsmith
+fastapi
+uvicorn[standard]
+dotenv
