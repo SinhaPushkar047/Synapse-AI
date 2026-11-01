@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -931,6 +930,26 @@
       background: rgba(255, 255, 255, 0.025);
     }
 
+    /* CHANGED (tool display): small badges showing which tools the AI used */
+    .tool-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .tool-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 11px;
+      font-size: 11px;
+      color: #c4b5fd;
+      border: 1px solid rgba(165, 144, 255, 0.3);
+      border-radius: 20px;
+      background: rgba(139, 92, 246, 0.12);
+    }
+
   </style>
 </head>
 
@@ -1249,7 +1268,13 @@
       if (!currentSession) return;
 
       currentSession.thread_id = currentThreadId;
-      currentSession.html = messages.innerHTML;
+
+      // CHANGED (fix 2): don't save the "thinking" dots into the stored chat
+      const clone = messages.cloneNode(true);
+      clone.querySelector("#typingIndicator")?.remove();
+      currentSession.html = clone.innerHTML;
+      // END CHANGE
+
       currentSession.updated_at = Date.now();
 
       // Keep most recently updated chats at the top.
@@ -1341,9 +1366,7 @@
     showWelcomeScreen();
     updateThreadDisplay();
     renderChatSessions();
-
-    updateThreadDisplay();
-    renderChatSessions();
+    // CHANGED: removed the duplicated updateThreadDisplay()/renderChatSessions() calls that were here
 
     function scrollToBottom() {
       chatArea.scrollTop = chatArea.scrollHeight;
@@ -1454,6 +1477,45 @@
       document.getElementById("typingIndicator")?.remove();
     }
 
+    // CHANGED (tool display): the backend sends [[TOOL:name]] markers inside the text stream.
+    // These helpers pull the markers out, and show them as badges above the answer.
+    function splitToolMarkers(raw) {
+      const tools = [];
+      let text = raw.replace(/\[\[TOOL:([^\]]+)\]\]/g, (_, name) => {
+        tools.push(name.trim());
+        return "";
+      });
+      text = text.replace(/\[\[TOOL:[^\]]*$/, ""); // hide a marker that is still arriving
+      // CHANGED: show each tool only once, even if the marker arrived many times
+      return { text, tools: [...new Set(tools)] };
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[c]));
+    }
+
+    function renderAiBubble(bubble, raw) {
+      const { text, tools } = splitToolMarkers(raw);
+
+      const chips = tools.length
+        ? `<div class="tool-chips">${tools.map(t =>
+            `<span class="tool-chip"><i class="fa-solid fa-screwdriver-wrench"></i> Used tool: ${escapeHtml(t)}</span>`
+          ).join("")}</div>`
+        : "";
+
+      if (window.marked && window.DOMPurify) {
+        const html = window.marked.parse(text, { breaks: true, gfm: true });
+        bubble.innerHTML = chips + window.DOMPurify.sanitize(html);
+      } else {
+        // Safe fallback if the Markdown CDN libraries are unavailable.
+        bubble.innerHTML = chips;
+        bubble.append(document.createTextNode(text));
+      }
+    }
+    // END CHANGE
+
     async function sendMessage(text) {
       text = text.trim();
 
@@ -1528,25 +1590,26 @@
 
             fullResponse += decoder.decode(value, { stream: true });
 
-            if (!aiMessage && fullResponse.length > 0) {
+            // CHANGED (tool display): wait for real text; while only a tool marker has
+            // arrived, keep the thinking indicator and show which tool is running.
+            const parsed = splitToolMarkers(fullResponse);
+
+            if (!aiMessage && parsed.text.trim().length > 0) {
                 removeTyping();
                 aiMessage = addMessage("", "ai");
                 bubble = aiMessage.querySelector(".bubble");
+            } else if (!aiMessage && parsed.tools.length) {
+                const toolName = parsed.tools[parsed.tools.length - 1];
+                const nameEl = document.querySelector("#typingIndicator .message-name");
+                if (nameEl) nameEl.textContent = `Using tool: ${toolName}…`;
+                statusText.textContent = `Using tool: ${toolName}`;
             }
 
             if (bubble) {
-                if (window.marked && window.DOMPurify) {
-                    const html = window.marked.parse(fullResponse, {
-                        breaks: true,
-                        gfm: true
-                    });
-                    bubble.innerHTML = window.DOMPurify.sanitize(html);
-                } else {
-                    // Safe fallback if the Markdown CDN libraries are unavailable.
-                    bubble.textContent = fullResponse;
-                }
+                renderAiBubble(bubble, fullResponse);
                 scrollToBottom();
             }
+            // END CHANGE
         }
 
         // Flush any remaining UTF-8 bytes after the stream ends.
@@ -1560,15 +1623,8 @@
         }
 
         // Render the complete final Markdown after streaming finishes.
-        if (window.marked && window.DOMPurify) {
-            const finalHtml = window.marked.parse(fullResponse, {
-                breaks: true,
-                gfm: true
-            });
-            bubble.innerHTML = window.DOMPurify.sanitize(finalHtml);
-        } else {
-            bubble.textContent = fullResponse;
-        }
+        // CHANGED (tool display): same renderer as above, so tool badges stay in the final message
+        renderAiBubble(bubble, fullResponse);
 
         statusText.textContent = "Response complete";
         saveCurrentChat();
@@ -1579,10 +1635,14 @@
 
         console.error("Chat request failed:", error);
 
+        // CHANGED (fix 3): tell backend HTTP errors apart from real connection failures
         addMessage(
-            "I couldn't connect to the backend. Check that FastAPI is running and your API URL and CORS settings are correct.",
+            error.message.startsWith("API returned")
+                ? "The backend returned an error. Check the FastAPI terminal for details."
+                : "I couldn't connect to the backend. Check that FastAPI is running and your API URL and CORS settings are correct.",
             "ai"
         );
+        // END CHANGE
         showError(`Connection error: ${error.message}`);
         statusText.textContent = "Connection issue";
 
@@ -1614,13 +1674,15 @@
       }
     });
 
-    // Connect suggestion cards and sidebar suggestions, including restored welcome screens.
-    function bindPromptButtons() {
-      document.querySelectorAll("[data-prompt]").forEach((button) => {
-        button.addEventListener("click", () => sendMessage(button.dataset.prompt));
-      });
-    }
-    bindPromptButtons();
+    // CHANGED (fix 1): one delegated click listener for all [data-prompt] buttons
+    // (sidebar suggestions + welcome cards, including ones restored from saved chats),
+    // instead of re-binding every button each time the welcome screen reloads.
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-prompt]");
+      if (button) sendMessage(button.dataset.prompt);
+    });
+    function bindPromptButtons() {}  // kept empty so the existing calls above still work
+    // END CHANGE
 
     // Start a fresh conversation. The backend assigns its thread ID
     // when the first message is sent; the frontend does not invent one.
