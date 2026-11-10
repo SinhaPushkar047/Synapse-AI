@@ -950,6 +950,78 @@
       background: rgba(139, 92, 246, 0.12);
     }
 
+    /* Tool approval box (Yes / No) */
+    .approval-box {
+      width: 100%;
+      padding: 18px 20px;
+      border: 1px solid rgba(165, 144, 255, 0.35);
+      border-radius: 4px 17px 17px 17px;
+      background: rgba(139, 92, 246, 0.10);
+    }
+
+    .approval-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #e6defe;
+      margin-bottom: 10px;
+    }
+
+    .approval-title i { color: #a78bfa; margin-right: 6px; }
+
+    .approval-call { margin-bottom: 10px; }
+
+    .approval-call strong {
+      display: block;
+      font-size: 12px;
+      color: #c4b5fd;
+      margin-bottom: 6px;
+    }
+
+    .approval-call pre {
+      max-height: 160px;
+      overflow: auto;
+      padding: 10px 12px;
+      font-size: 11px;
+      line-height: 1.6;
+      color: #d7efff;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      background: rgba(3, 6, 16, 0.8);
+    }
+
+    .approval-question {
+      font-size: 12px;
+      color: var(--muted);
+      margin: 12px 0;
+    }
+
+    .approval-actions { display: flex; gap: 10px; }
+
+    .approval-btn {
+      padding: 9px 22px;
+      font-size: 12px;
+      font-weight: 600;
+      color: white;
+      border: 1px solid transparent;
+      border-radius: 11px;
+      transition: 0.2s;
+    }
+
+    .approval-btn:hover { transform: translateY(-1px); }
+
+    .approval-btn.yes { background: linear-gradient(135deg, #7c3aed, #818cf8); }
+
+    .approval-btn.no {
+      background: transparent;
+      border-color: var(--border);
+      color: #bbc2df;
+    }
+
+    .approval-result { font-size: 12px; color: #9be8b5; }
+    .approval-result.denied { color: #ffb4b4; }
+
   </style>
 </head>
 
@@ -1159,7 +1231,9 @@
 
 
     // My Chats are saved in this browser using localStorage.
-    // This keeps the existing FastAPI backend unchanged.
+    // The backend (api_.py) does NOT return a thread ID, and creates a brand-new
+    // one whenever the "thread-id" header is missing. So the frontend generates
+    // the thread ID itself and sends it with every request to keep memory per chat.
     const myChatsToggle = document.getElementById("myChatsToggle");
     const myChatsItems = document.getElementById("myChatsItems");
     const STORAGE_KEY = "synapse_chats_v1";
@@ -1167,6 +1241,17 @@
     let currentSession = null;
     let currentThreadId = null;
     let chatSessions = [];
+
+    function generateThreadId() {
+      if (window.crypto && typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID();
+      }
+      // Fallback for older browsers / non-secure contexts.
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+      });
+    }
 
     function readSavedChats() {
       try {
@@ -1190,7 +1275,7 @@
     function updateThreadDisplay() {
       const threadElement = document.getElementById("thread-id");
       if (threadElement) {
-        threadElement.textContent = currentThreadId || "Not assigned yet";
+        threadElement.textContent = currentThreadId || "No active thread";
       }
 
       input.placeholder = currentThreadId
@@ -1201,7 +1286,7 @@
     function createChatSession() {
       const session = {
         id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        thread_id: null,
+        thread_id: generateThreadId(),
         title: "New conversation",
         html: "",
         updated_at: Date.now()
@@ -1209,7 +1294,7 @@
 
       chatSessions.unshift(session);
       currentSession = session;
-      currentThreadId = null;
+      currentThreadId = session.thread_id;
       persistChats();
       renderChatSessions();
       updateThreadDisplay();
@@ -1228,7 +1313,7 @@
 
       const threadValue = document.createElement("div");
       threadValue.id = "thread-id";
-      threadValue.textContent = currentThreadId || "Not assigned yet";
+      threadValue.textContent = currentThreadId || "No active thread";
 
       threadBox.append(threadLabel, threadValue);
       myChatsItems.appendChild(threadBox);
@@ -1272,6 +1357,7 @@
       // CHANGED (fix 2): don't save the "thinking" dots into the stored chat
       const clone = messages.cloneNode(true);
       clone.querySelector("#typingIndicator")?.remove();
+      clone.querySelectorAll(".approval-box:not(.done)").forEach(el => el.closest(".message")?.remove());
       currentSession.html = clone.innerHTML;
       // END CHANGE
 
@@ -1294,7 +1380,8 @@
       if (!session) return;
 
       currentSession = session;
-      currentThreadId = session.thread_id || null;
+      if (!session.thread_id) session.thread_id = generateThreadId();
+      currentThreadId = session.thread_id;
 
       messages.innerHTML = session.html || "";
       if (!messages.innerHTML.trim()) {
@@ -1361,7 +1448,7 @@
 
     chatSessions = [];
     currentSession = null;
-    currentThreadId = null; 
+    currentThreadId = null;
 
     showWelcomeScreen();
     updateThreadDisplay();
@@ -1477,44 +1564,207 @@
       document.getElementById("typingIndicator")?.remove();
     }
 
-    // CHANGED (tool display): the backend sends [[TOOL:name]] markers inside the text stream.
-    // These helpers pull the markers out, and show them as badges above the answer.
-    function splitToolMarkers(raw) {
-      const tools = [];
-      let text = raw.replace(/\[\[TOOL:([^\]]+)\]\]/g, (_, name) => {
-        tools.push(name.trim());
-        return "";
-      });
-      text = text.replace(/\[\[TOOL:[^\]]*$/, ""); // hide a marker that is still arriving
-      // CHANGED: show each tool only once, even if the marker arrived many times
-      return { text, tools: [...new Set(tools)] };
-    }
-
-    function escapeHtml(s) {
-      return s.replace(/[&<>"']/g, (c) => ({
-        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-      }[c]));
-    }
-
-    function renderAiBubble(bubble, raw) {
-      const { text, tools } = splitToolMarkers(raw);
-
-      const chips = tools.length
-        ? `<div class="tool-chips">${tools.map(t =>
-            `<span class="tool-chip"><i class="fa-solid fa-screwdriver-wrench"></i> Used tool: ${escapeHtml(t)}</span>`
-          ).join("")}</div>`
-        : "";
-
+    // Renders the assistant's streamed text as sanitized Markdown.
+    function renderAiBubble(bubble, text) {
       if (window.marked && window.DOMPurify) {
         const html = window.marked.parse(text, { breaks: true, gfm: true });
-        bubble.innerHTML = chips + window.DOMPurify.sanitize(html);
+        bubble.innerHTML = window.DOMPurify.sanitize(html);
       } else {
         // Safe fallback if the Markdown CDN libraries are unavailable.
-        bubble.innerHTML = chips;
-        bubble.append(document.createTextNode(text));
+        bubble.textContent = text;
       }
     }
-    // END CHANGE
+
+    // The backend ends the stream with [[APPROVAL:{...}]] when it needs permission to use a tool.
+    function splitApproval(raw) {
+      const i = raw.indexOf("[[APPROVAL:");
+      if (i === -1) return { text: raw, approval: null };
+
+      const text = raw.slice(0, i).trimEnd();
+      const m = raw.slice(i).match(/^\[\[APPROVAL:([\s\S]*)\]\]\s*$/);
+      let approval = null;
+      if (m) {
+        try { approval = JSON.parse(m[1]); } catch (e) { console.error("Bad approval payload", e); }
+      }
+      return { text, approval };
+    }
+
+    // Reads a streamed response into the chat. Returns the approval request, or null.
+    async function readStream(response) {
+      if (!response.ok) {
+        throw new Error(`API returned HTTP ${response.status}`);
+      }
+      if (!response.body) {
+        throw new Error("Streaming response is not supported.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullResponse = "";
+      let aiMessage = null;
+      let bubble = null;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        fullResponse += decoder.decode(value, { stream: true });
+        const { text } = splitApproval(fullResponse);
+
+        if (!aiMessage && text.trim().length > 0) {
+          removeTyping();
+          aiMessage = addMessage("", "ai");
+          bubble = aiMessage.querySelector(".bubble");
+        }
+
+        if (bubble) {
+          renderAiBubble(bubble, text);
+          scrollToBottom();
+        }
+      }
+
+      fullResponse += decoder.decode();
+      const { text, approval } = splitApproval(fullResponse);
+
+      removeTyping();
+
+      // Skip the empty bubble when the model only asked for a tool.
+      if (!aiMessage && (text.trim() || !approval)) {
+        aiMessage = addMessage("", "ai");
+        bubble = aiMessage.querySelector(".bubble");
+      }
+      if (bubble) renderAiBubble(bubble, text);
+
+      return approval;
+    }
+
+    function showApprovalBox(approval) {
+      hideWelcome();
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "message";
+
+      const avatar = document.createElement("div");
+      avatar.className = "message-avatar";
+      avatar.innerHTML = '<i class="fa-solid fa-brain"></i>';
+
+      const content = document.createElement("div");
+      content.className = "message-content";
+
+      const name = document.createElement("div");
+      name.className = "message-name";
+      name.textContent = "SYNAPSE AI";
+
+      const box = document.createElement("div");
+      box.className = "approval-box";
+
+      const title = document.createElement("div");
+      title.className = "approval-title";
+      title.innerHTML = '<i class="fa-solid fa-screwdriver-wrench"></i>';
+      title.append("SYNAPSE wants to use a tool");
+      box.appendChild(title);
+
+      (approval.tool_calls || []).forEach((call) => {
+        const item = document.createElement("div");
+        item.className = "approval-call";
+
+        const toolName = document.createElement("strong");
+        toolName.textContent = call.name;
+
+        const args = document.createElement("pre");
+        args.textContent = JSON.stringify(call.args, null, 2);
+
+        item.append(toolName, args);
+        box.appendChild(item);
+      });
+
+      const question = document.createElement("div");
+      question.className = "approval-question";
+      question.textContent = "Do you want to allow this?";
+
+      const actions = document.createElement("div");
+      actions.className = "approval-actions";
+
+      const yes = document.createElement("button");
+      yes.type = "button";
+      yes.className = "approval-btn yes";
+      yes.textContent = "Yes";
+
+      const no = document.createElement("button");
+      no.type = "button";
+      no.className = "approval-btn no";
+      no.textContent = "No";
+
+      yes.addEventListener("click", () => answerApproval(box, true));
+      no.addEventListener("click", () => answerApproval(box, false));
+
+      actions.append(yes, no);
+      box.append(question, actions);
+
+      content.append(name, box);
+      wrapper.append(avatar, content);
+      messages.appendChild(wrapper);
+      scrollToBottom();
+    }
+
+    function finishLoading() {
+      isLoading = false;
+      sendBtn.disabled = false;
+      input.focus();
+      scrollToBottom();
+    }
+
+    function handleChatError(error) {
+      removeTyping();
+      console.error("Chat request failed:", error);
+
+      addMessage(
+        error.message.startsWith("API returned")
+          ? "The backend returned an error. Check the FastAPI terminal for details."
+          : "I couldn't connect to the backend. Check that FastAPI is running and your API URL and CORS settings are correct.",
+        "ai"
+      );
+      showError(`Connection error: ${error.message}`);
+      statusText.textContent = "Connection issue";
+    }
+
+    // Called when the user clicks Yes / No. Resumes the paused graph via GET /Approve.
+    async function answerApproval(box, approved) {
+      if (box.classList.contains("done")) return;
+      box.classList.add("done");
+
+      const result = document.createElement("div");
+      result.className = "approval-result" + (approved ? "" : " denied");
+      result.textContent = approved ? "✓ Approved" : "✕ Denied";
+      box.querySelector(".approval-question")?.remove();
+      box.querySelector(".approval-actions").replaceWith(result);
+
+      statusText.textContent = "Generating response";
+      showTyping();
+
+      let waitingApproval = false;
+      try {
+        const response = await fetch(`${API_URL}/Approve?approved=${approved}`, {
+          method: "GET",
+          headers: { "Accept": "text/plain", "thread-id": currentThreadId }
+        });
+
+        const next = await readStream(response);
+
+        if (next) {
+          showApprovalBox(next);
+          statusText.textContent = "Waiting for your approval";
+          waitingApproval = true;
+        } else {
+          statusText.textContent = "Response complete";
+        }
+        saveCurrentChat();
+      } catch (error) {
+        handleChatError(error);
+      } finally {
+        if (!waitingApproval) finishLoading();
+      }
+    }
 
     async function sendMessage(text) {
       text = text.trim();
@@ -1545,112 +1795,47 @@
       showTyping();
 
 
-    try {
-        const params = new URLSearchParams({ input: text });
+    let waitingApproval = false;
 
-        if (currentThreadId) {
-            params.set("thread_id", currentThreadId);
+    try {
+        // Backend: GET /Conversation?user_input=...  with header "thread-id"
+        // (FastAPI maps the Python parameter `thread_id` to the header `thread-id`).
+        if (!currentThreadId) {
+            currentThreadId = generateThreadId();
+            if (currentSession) currentSession.thread_id = currentThreadId;
+            updateThreadDisplay();
         }
 
-        const url = `${API_URL}/chat?${params.toString()}`;
+        const params = new URLSearchParams({ user_input: text });
+        const url = `${API_URL}/Conversation?${params.toString()}`;
 
         const response = await fetch(url, {
             method: "GET",
-            headers: { "Accept": "text/plain" }
+            headers: {
+                "Accept": "text/plain",
+                "thread-id": currentThreadId
+            }
         });
 
-        const threadId = response.headers.get("X-Thread-ID");
-        console.log("Current Thread ID:", threadId);
+        const approval = await readStream(response);
 
-        if (threadId) {
-            currentThreadId = threadId;
-            if (currentSession) currentSession.thread_id = threadId;
-            updateThreadDisplay();
-            saveCurrentChat();
+        if (approval) {
+            // Graph is paused: ask the user Yes / No before the tool runs.
+            showApprovalBox(approval);
+            statusText.textContent = "Waiting for your approval";
+            waitingApproval = true;
+        } else {
+            statusText.textContent = "Response complete";
         }
 
-        if (!response.ok) {
-            throw new Error(`API returned HTTP ${response.status}`);
-        }
-
-        if (!response.body) {
-            throw new Error("Streaming response is not supported.");
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let fullResponse = "";
-        let aiMessage = null;
-        let bubble = null;
-
-        // Keep the thinking indicator visible until the first actual text arrives.
-        while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-
-            fullResponse += decoder.decode(value, { stream: true });
-
-            // CHANGED (tool display): wait for real text; while only a tool marker has
-            // arrived, keep the thinking indicator and show which tool is running.
-            const parsed = splitToolMarkers(fullResponse);
-
-            if (!aiMessage && parsed.text.trim().length > 0) {
-                removeTyping();
-                aiMessage = addMessage("", "ai");
-                bubble = aiMessage.querySelector(".bubble");
-            } else if (!aiMessage && parsed.tools.length) {
-                const toolName = parsed.tools[parsed.tools.length - 1];
-                const nameEl = document.querySelector("#typingIndicator .message-name");
-                if (nameEl) nameEl.textContent = `Using tool: ${toolName}…`;
-                statusText.textContent = `Using tool: ${toolName}`;
-            }
-
-            if (bubble) {
-                renderAiBubble(bubble, fullResponse);
-                scrollToBottom();
-            }
-            // END CHANGE
-        }
-
-        // Flush any remaining UTF-8 bytes after the stream ends.
-        fullResponse += decoder.decode();
-
-        // Ensure even an empty/very short response removes the thinking indicator.
-        if (!aiMessage) {
-            removeTyping();
-            aiMessage = addMessage("", "ai");
-            bubble = aiMessage.querySelector(".bubble");
-        }
-
-        // Render the complete final Markdown after streaming finishes.
-        // CHANGED (tool display): same renderer as above, so tool badges stay in the final message
-        renderAiBubble(bubble, fullResponse);
-
-        statusText.textContent = "Response complete";
         saveCurrentChat();
         scrollToBottom();
 
     } catch (error) {
-        removeTyping();
-
-        console.error("Chat request failed:", error);
-
-        // CHANGED (fix 3): tell backend HTTP errors apart from real connection failures
-        addMessage(
-            error.message.startsWith("API returned")
-                ? "The backend returned an error. Check the FastAPI terminal for details."
-                : "I couldn't connect to the backend. Check that FastAPI is running and your API URL and CORS settings are correct.",
-            "ai"
-        );
-        // END CHANGE
-        showError(`Connection error: ${error.message}`);
-        statusText.textContent = "Connection issue";
+        handleChatError(error);
 
     } finally {
-        isLoading = false;
-        sendBtn.disabled = false;
-        input.focus();
-        scrollToBottom();
+        if (!waitingApproval) finishLoading();
     }
 
     }
@@ -1684,14 +1869,13 @@
     function bindPromptButtons() {}  // kept empty so the existing calls above still work
     // END CHANGE
 
-    // Start a fresh conversation. The backend assigns its thread ID
-    // when the first message is sent; the frontend does not invent one.
+    // Start a fresh conversation with a brand-new thread ID (new memory on the backend).
     document.getElementById("newChat").addEventListener("click", () => {
       if (isLoading) return;
 
       currentSession = null;
       currentThreadId = null;
-      createChatSession();
+      createChatSession();   // generates a new thread ID
       showWelcomeScreen();
 
       clearError();
