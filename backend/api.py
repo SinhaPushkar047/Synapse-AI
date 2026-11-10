@@ -13,6 +13,7 @@ from langgraph.types import interrupt, Command
 from psycopg_pool import ConnectionPool
 import asyncio
 from langchain_core.tools import StructuredTool
+from concurrent.futures import ThreadPoolExecutor
 from psycopg.rows import dict_row
 from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -59,8 +60,6 @@ client = MultiServerMCPClient(
         }
     }
 )
-
-from concurrent.futures import ThreadPoolExecutor
 
 with ThreadPoolExecutor(max_workers=1) as ex:
     raw_tools = ex.submit(asyncio.run, client.get_tools()).result()
