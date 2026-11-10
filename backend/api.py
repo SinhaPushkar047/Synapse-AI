@@ -292,6 +292,3 @@ def conv(user_input: str, thread_id: str | None = Header(default=None)):
 def approve(approved: bool, thread_id: str = Header()):
     config = {"configurable": {"thread_id": thread_id}}
     return StreamingResponse(stream(Command(resume={"approved": approved}), config), media_type="text/plain")
-
-#*****************************************************************Corrective RAG**********************************************
-
