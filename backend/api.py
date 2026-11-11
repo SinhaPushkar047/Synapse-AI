@@ -62,8 +62,8 @@ embeddings = NVIDIAEmbeddings(
 )
 
 splitter = RecursiveCharacterTextSplitter(
-    chunk_size=900,
-    chunk_overlap=150
+    chunk_size=2500,
+    chunk_overlap=300
 )
 
 pdf_vector_stores = {}
@@ -77,7 +77,7 @@ client = MultiServerMCPClient(
     {
         "tavily-search": {
             "transport": "http",
-            "url": "http://127.0.0.1:8001/mcp"
+            "url": "https://mcp-web-server-9kop.onrender.com/mcp"
         }
     }
 )
@@ -128,7 +128,7 @@ def chat(state: Chatbot, config):
         # Retrieve relevant PDF chunks
         docs = pdf_vector_stores[thread_id].similarity_search(
             question,
-            k=4
+            k=10
         )
 
         context = "\n\n".join(
@@ -146,6 +146,16 @@ def chat(state: Chatbot, config):
             2. If it sufficiently answers the question, answer using it.
             3. If it is insufficient, use the available MCP web search tool.
             4. Clearly distinguish PDF information from web information.
+
+            FORMATTING RULES:
+            - Always follow the user's requested output format.
+            - If the user requests a table, generate a valid Markdown table.
+            - Use Markdown table syntax with header and separator rows.
+            - Never replace a requested table with bullet points or paragraphs.
+            - For timetables, use days as rows and time slots as columns.
+            - Keep table cells concise and preserve all available information.
+            - Never put Markdown tables inside code blocks.
+
 
             PDF CONTEXT:
             {context}
@@ -173,7 +183,10 @@ def approval(state: Chatbot) -> Command[Literal["tools", "chat"]]:
 
 #********************************************************post gre connection**********************************************
 
-DB_URI = f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@localhost:5432/{os.getenv('POSTGRES_DB')}"
+DB_URI = os.getenv("DATABASE_URL")
+
+if not DB_URI:
+    raise RuntimeError("DATABASE_URL is not configured")
 
 pool = ConnectionPool(
     conninfo=DB_URI,
@@ -183,6 +196,7 @@ pool = ConnectionPool(
 
 checkpointer = PostgresSaver(pool)
 checkpointer.setup()
+
 
 #***********************************************************graph building*************************************************
 
