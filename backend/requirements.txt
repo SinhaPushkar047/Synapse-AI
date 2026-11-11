@@ -5,3 +5,4 @@ langsmith
 fastapi
 uvicorn[standard]
 dotenv
+langchain-community
