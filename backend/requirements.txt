@@ -6,3 +6,4 @@ fastapi
 uvicorn[standard]
 dotenv
 langchain-community
+langchain-mcp-adapters
