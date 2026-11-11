@@ -1,5 +1,11 @@
 # 🧠 SYNAPSE AI
 
+## 🌐 Live Demo
+
+🚀 **Try SYNAPSE AI:** [Click here to use SYNAPSE AI](https://synapse-ai-frontend-e4macl94o-sinhapushkar047.vercel.app/)
+
+Experience the live chatbot directly in your browser.
+
 > An AI chatbot combining **NVIDIA Nemotron, MCP web search, PDF-based RAG, and human-approved tool execution**.
 
 SYNAPSE AI uses FastAPI and LangGraph to coordinate conversations, retrieve information from uploaded PDFs, and call web-search tools through an MCP server.
