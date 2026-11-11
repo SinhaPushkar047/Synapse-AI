@@ -83,13 +83,14 @@ client = MultiServerMCPClient(
     }
 )
 
-def load_tools(retries=6, delay=10):
+def load_tools(retries=3, delay=5):
     for i in range(retries):
         try:
             with ThreadPoolExecutor(max_workers=1) as ex:
                 return ex.submit(asyncio.run, client.get_tools()).result()
-        except Exception as e:
-            print(f"MCP not ready (attempt {i+1}/{retries}): {e}")
+        except BaseException as e:
+            inner = getattr(e, "exceptions", [e])
+            print(f"MCP not ready (attempt {i+1}/{retries}): {[repr(x) for x in inner]}")
             time.sleep(delay)
     print("MCP unavailable, starting without tools")
     return []
@@ -195,19 +196,20 @@ def approval(state: Chatbot) -> Command[Literal["tools", "chat"]]:
 #********************************************************post gre connection**********************************************
 
 DB_URI = os.getenv("DATABASE_URL")
+print("DATABASE_URL set:", bool(DB_URI))
 
-if not DB_URI:
-    raise RuntimeError("DATABASE_URL is not configured")
-
-pool = ConnectionPool(
-    conninfo=DB_URI,
-    max_size=10,
-    kwargs={"autocommit": True, "row_factory": dict_row}
-)
-
-checkpointer = PostgresSaver(pool)
-checkpointer.setup()
-
+if DB_URI:
+    pool = ConnectionPool(
+        conninfo=DB_URI,
+        max_size=10,
+        kwargs={"autocommit": True, "row_factory": dict_row}
+    )
+    checkpointer = PostgresSaver(pool)
+    checkpointer.setup()
+else:
+    from langgraph.checkpoint.memory import MemorySaver
+    print("WARNING: DATABASE_URL missing, using in-memory chat history")
+    checkpointer = MemorySaver()
 
 #***********************************************************graph building*************************************************
 
