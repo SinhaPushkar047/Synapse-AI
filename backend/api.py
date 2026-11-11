@@ -15,6 +15,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 import tempfile
 from typing import Literal
+import time
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.types import interrupt, Command
 from psycopg_pool import ConnectionPool
@@ -77,13 +78,23 @@ client = MultiServerMCPClient(
     {
         "tavily-search": {
             "transport": "http",
-            "url": "https://mcp-web-server-9kop.onrender.com/mcp"
+            "url": os.getenv("MCP_URL", "https://mcp-web-server-9kop.onrender.com/mcp")
         }
     }
 )
 
-with ThreadPoolExecutor(max_workers=1) as ex:
-    raw_tools = ex.submit(asyncio.run, client.get_tools()).result()
+def load_tools(retries=6, delay=10):
+    for i in range(retries):
+        try:
+            with ThreadPoolExecutor(max_workers=1) as ex:
+                return ex.submit(asyncio.run, client.get_tools()).result()
+        except Exception as e:
+            print(f"MCP not ready (attempt {i+1}/{retries}): {e}")
+            time.sleep(delay)
+    print("MCP unavailable, starting without tools")
+    return []
+
+raw_tools = load_tools()
 
 tools = []
 for tool in raw_tools:
@@ -93,15 +104,15 @@ for tool in raw_tools:
             return asyncio.run(t.ainvoke(kwargs))
         return sync_fn
 
-    sync_tool = StructuredTool.from_function(
+    tools.append(StructuredTool.from_function(
         func=make_sync_fn(tool),
         name=tool.name,
         description=tool.description,
         args_schema=tool.args_schema,
-    )
-    tools.append(sync_tool)
+    ))
 
-model=model.bind_tools(tools)
+if tools:
+    model = model.bind_tools(tools)
 
 #******************************************************thread id generation***********************************************
 
