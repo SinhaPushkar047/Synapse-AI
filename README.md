@@ -322,13 +322,6 @@ thread-id: your-thread-id
 
 Use `approved=false` to reject the tool call.
 
-## 🖼️ Screenshots
-
-<img width="1577" height="852" alt="image" src="https://github.com/user-attachments/assets/df5c7135-0108-483f-a1dc-d6301fe27cf6" />
-
-<img width="1583" height="890" alt="image" src="https://github.com/user-attachments/assets/0c8e281e-cf84-4dfb-a281-e9377d3edd0c" />
-
-
 ## 📝 Notes
 
 - PostgreSQL stores LangGraph checkpoints; it does not store the FAISS indexes.
