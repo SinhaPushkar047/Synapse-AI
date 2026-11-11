@@ -2,7 +2,7 @@
 
 ## 🌐 Live Demo
 
-🚀 **Try SYNAPSE AI:** [Click here to use SYNAPSE AI](https://synapse-ai-frontend-e4macl94o-sinhapushkar047.vercel.app/)
+🚀 **Try SYNAPSE AI:** [Click here to use SYNAPSE AI](https://synapse-ai-frontend-kappa.vercel.app/)
 
 Experience the live chatbot directly in your browser.
 
