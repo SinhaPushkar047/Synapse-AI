@@ -3060,20 +3060,17 @@
 
 
 
-    // Restore conversations saved in this browser.
-    chatSessions = readSavedChats();
+    // Fresh start on every page load: wipe old saved chats.
+    localStorage.removeItem(STORAGE_KEY);
+    chatSessions = [];
     currentSession = null;
     currentThreadId = null;
     uploadedPdfNames = [];
 
-    if (chatSessions.length) {
-      loadConversation(chatSessions[0].id);
-    } else {
-      showWelcomeScreen();
-      updateThreadDisplay();
-      renderChatSessions();
-      renderPdfFiles();
-    }
+    showWelcomeScreen();
+    updateThreadDisplay();
+    renderChatSessions();
+    renderPdfFiles();
 
     // CHANGED: removed the duplicated updateThreadDisplay()/renderChatSessions() calls that were here
 
